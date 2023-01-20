@@ -4,6 +4,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as scipy
+from scipy import io
 from PIL.Image import Image
 
 from ocvl.preprocessing.improc import optimizer_stack_align, weighted_z_projection
@@ -14,13 +15,16 @@ from ocvl.utility.resources import load_video
 if __name__ == "__main__":
     # Load our video data.
 
-    res = load_video("M:\\Dropbox (Personal)\\Research\\Torsion_Distortion_Correction\\COST_rawvideo.avi")
+    #res = load_video("M:\\Dropbox (Personal)\\Research\\Torsion_Distortion_Correction\\COST_rawvideo.avi")
+    res = load_video("data/COST_stabilized_video.avi")
     num_frames = res.data.shape[-1]
     width = res.data.shape[1]
     height = res.data.shape[0]
     video_data = res.data.astype("float32") / 255
+    print( width, height )
 
-    matcontents = scipy.io.loadmat("M:\\Dropbox (Personal)\\Research\\Torsion_Distortion_Correction\\shifts_all.mat")
+    #matcontents = scipy.io.loadmat("M:\\Dropbox (Personal)\\Research\\Torsion_Distortion_Correction\\shifts_all.mat")
+    matcontents = io.loadmat("data/shifts_all.mat")
 
     all_shifts = matcontents["shifts_all"]
 
@@ -39,6 +43,8 @@ if __name__ == "__main__":
     # Best guess for reference frame, since we can't tell from the data.
     reference_frame_idx = np.sum(np.sum(np.abs(all_shifts) < 2, axis=0), axis=0).argmax()
 
+    print( reference_frame_idx )
+
     f=0
     for f in range(num_frames):
         print(f)
@@ -51,11 +57,11 @@ if __name__ == "__main__":
         shifted[..., f] = cv2.remap(video_data[..., f], centered_col_shifts, centered_row_shifts,
                                     interpolation=cv2.INTER_CUBIC)
 
-        # plt.figure(0)
-        # plt.clf()
-        # plt.imshow(shifted[..., f])
-        # plt.show(block=False)
-        # plt.pause(0.01)
+        #plt.figure(0)
+        #plt.clf()
+        #plt.imshow(shifted[..., f])
+        #plt.show(block=False)
+        #plt.pause(0.01)
 
         f += 1
 
@@ -75,4 +81,5 @@ if __name__ == "__main__":
     # cv2.imwrite(avg_path, (avg_im*255).astype("uint8"))
     im_conf = Image.fromarray((avg_im * 255).astype("uint8"), "L")
     im_conf.putalpha(Image.fromarray((overlap_map * 255).astype("uint8"), "L"))
-    im_conf.save("M:\\Dropbox (Personal)\\Research\\Torsion_Distortion_Correction\\COST_rawvideo_reavg.png")
+    #im_conf.save("M:\\Dropbox (Personal)\\Research\\Torsion_Distortion_Correction\\COST_rawvideo_reavg.png")
+    im_conf.save("data/COST_rawvideo_reavg.png")
