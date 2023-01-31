@@ -8,10 +8,6 @@ from scipy.ndimage import binary_erosion
 from scipy.signal import fftconvolve
 from numpy.polynomial import Polynomial
 
-from ocvl.utility.resources import save_video
-
-import pickle
-
 
 def flat_field_frame(dataframe, sigma):
     kernelsize = 3 * sigma
@@ -283,7 +279,7 @@ def optimizer_stack_align(im_stack, mask_stack, reference_idx, determine_initial
 
     # Erode our masks a bit to help with stability.
     for f in range(0, num_frames):
-        print('Erode: %03d'%f)
+        print('Erode frame: %03d/%03d'%(f,num_frames))
         eroded_mask[..., f] = binary_erosion(mask_stack[..., f], structure=np.ones((21, 21)))
     #   #  im_stack[..., f] *= mask_stack[..., f]
 
@@ -317,7 +313,7 @@ def optimizer_stack_align(im_stack, mask_stack, reference_idx, determine_initial
     itk_xforms=[]
     inliers = np.zeros(num_frames, dtype=bool)
     for f in range(0, num_frames):
-        print('X%d '%f,end=' ')
+        print('Compute transform %03d/%03d'%(f,num_frames) )
         if transformtype == "rigid":
             xForm = sitk.Euler2DTransform()
         elif transformtype == "affine":
@@ -359,24 +355,10 @@ def optimizer_stack_align(im_stack, mask_stack, reference_idx, determine_initial
         Tx[0:2, 2] = -np.dot(A, c)+t+c
         xforms[f] = Tx[0:2, :]
 
-        with open('data/pickles/outX%03d.pickle'%f, 'wb') as handle:
-            pickle.dump(outXform,handle)
-
         out_im = sitk.Resample(sitk.GetImageFromArray(im_stack[..., f]), ref_im, outXform, sitk.sitkLanczosWindowedSinc)
         reg_stack[..., f] = sitk.GetArrayFromImage(out_im)
 
-    
-    save_video('data/testalign_use.avi',
-        #"M:\\Dropbox (Personal)\\Research\\Torsion_Distortion_Correction\\testalign.avi",
-        (reg_stack * 255).astype("uint8"), 30)
-
-    with open('data/xforms_itk.pickle', 'wb') as handle:
-        pickle.dump(itk_xforms,handle)
-
-    with open('data/xforms.pickle', 'wb') as handle:
-        pickle.dump(xforms,handle)
-
-    return reg_stack, xforms, inliers
+    return reg_stack, xforms, inliers, itk_xforms
 
 
 def relativize_image_stack(image_data, mask_data, reference_idx=0, numkeypoints=5000, method="affine", dropthresh=None):
@@ -508,7 +490,5 @@ def weighted_z_projection(image_data, weights=None, projection_axis=-1, type="av
 
     image_projection[image_projection < minpossval] = minpossval
     image_projection[image_projection >= maxpossval] = maxpossval
-    #pyplot.imshow(image_projection, cmap='gray')
-    #pyplot.show()
 
     return image_projection.astype(origtype), (weight_projection / np.amax(weight_projection))
