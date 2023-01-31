@@ -37,7 +37,7 @@ def do_apply(torsion_params):
         os.mkdir( torsion_params.volumes_rotated_directory )
 
     for vol_file in glob.glob(torsion_params.volumes):
-        nvol = int( vol_file.split('/')[-1].split('_')[0] )
+        nvol = int( vol_file.split(os.path.sep)[-1].split('_')[0] ) # TODO: maybe better (more general) way to extract paths
         if (torsion_params.volumes_to_process is not None) and (nvol not in torsion_params.volumes_to_process):
             continue
         
@@ -47,7 +47,7 @@ def do_apply(torsion_params):
         xform1=xform_info["xforms"][nvol-1] # 0 based to 1-based:TODO, maybe switch to all one-based ?
         
         for nlayer in torsion_params.layers_to_process:
-            print( nlayer, end=' ')
+            print( nlayer, end=' ', flush=True)
             
             layer1=vol1[nlayer,:,:]
             realpart=np.abs(layer1)
