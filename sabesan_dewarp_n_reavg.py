@@ -9,9 +9,11 @@ from PIL.Image import Image
 
 from ocvl.preprocessing.improc import optimizer_stack_align, weighted_z_projection
 from ocvl.utility.resources import load_video,save_video
-import pickle,sys
+import pickle,sys,os
 
 import importlib.machinery, importlib.util
+
+import torsion_apply 
 
 # "compute"=Compute the transforms from the COST movie, generate new COST movie and its avg.
 # "apply"=Apply transforms from file specified in params file to volumes
@@ -40,6 +42,10 @@ if __name__ == "__main__":
     loader.exec_module(torsion_params)
        
     if do_compute:
+
+        if not(os.path.exists(torsion_params.output_directory )):
+                os.mkdir( torsion_params.output_directory )
+
         # Load our video data.
         res = load_video(torsion_params.filename_cost_video)
         num_frames = res.data.shape[-1]
@@ -70,7 +76,7 @@ if __name__ == "__main__":
         print( "Reference Idx: %03d"%reference_frame_idx )
     
         for f in range(num_frames):
-            print('Reshifting frame %03d/%03d'%(f,num_frames))
+            print('Reshifting frame %03d/%03d'%(f,num_frames), end=' ') # Don't make new lines so can see some of the debug info
             colshifts = all_shifts[:, 0, f] - median_col_shifts
             rowshifts = all_shifts[:, 1, f] - median_row_shifts
     
@@ -80,7 +86,7 @@ if __name__ == "__main__":
             shifted1 = cv2.remap(video_data[..., f], centered_col_shifts, centered_row_shifts,
                                         interpolation=cv2.INTER_CUBIC)
     
-            if torsion_params.video_do_rot90:
+            if torsion_params.do_rot90:
                 shifted[..., f] = np.flipud( np.rot90( shifted1, -1) )
             else:
                 shifted[..., f] = shifted1
@@ -105,7 +111,9 @@ if __name__ == "__main__":
         mask_data[mask_data >= 1] = 1
     
         with open(torsion_params.filename_transforms, 'wb') as handle:
-            pickle.dump(itk_xforms,handle)
+            dict_info={'xforms':itk_xforms,'ref_idx':reference_frame_idx,
+                    'shape':video_data.shape,'rot90':torsion_params.do_rot90}
+            pickle.dump(dict_info,handle)
     
         overlap_map, sum_map = weighted_z_projection(mask_data, mask_data)
         avg_im, sum_map = weighted_z_projection(shifted, mask_data)
@@ -115,3 +123,7 @@ if __name__ == "__main__":
         #im_conf.putalpha(Image.fromarray((overlap_map * 255).astype("uint8"), "L"))
         #im_conf.save("M:\\Dropbox (Personal)\\Research\\Torsion_Distortion_Correction\\COST_rawvideo_reavg.png")
         #im_conf.save("data/COST_rawvideo_reavg.png")
+
+    if do_apply:
+        torsion_apply.do_apply(torsion_params)
+        
