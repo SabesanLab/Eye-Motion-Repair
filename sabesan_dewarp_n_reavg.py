@@ -54,49 +54,58 @@ if __name__ == "__main__":
         video_data = res.data.astype("float32") / 255
         print( "Movie width,height: %02d,%02d"%  (width, height ) )
     
-        matcontents = io.loadmat(torsion_params.filename_shifts)
+        if torsion_params.reshift_raw_video:
+            matcontents = io.loadmat(torsion_params.filename_shifts)
     
-        all_shifts = matcontents["shifts_all"]
+            all_shifts_matlab = matcontents["all_shift_final"] # TODO: Get first field w/o name nicely.
+
+            all_shifts = np.zeros((height, 3, num_frames))
+            for f in range(num_frames):
+                all_shifts[..., f] = all_shifts_matlab[f * height:(f + 1) * height, :]
+
+            all_shifts = all_shifts[:,1:,:] # Drop axial shifts
     
-        all_shifts = np.zeros((height, 2, num_frames))
-        for f in range(num_frames):
-            all_shifts[..., f] = matcontents["shifts_all"][f * height:(f + 1) * height, :]
+            median_col_shifts = np.nanmedian(all_shifts[:, 0, :], axis=-1)
+            median_row_shifts = np.nanmedian(all_shifts[:, 1, :], axis=-1)
     
-        median_col_shifts = np.nanmedian(all_shifts[:, 0, :], axis=-1)
-        median_row_shifts = np.nanmedian(all_shifts[:, 1, :], axis=-1)
+            col_base = np.tile(np.arange(width, dtype=np.float32)[np.newaxis, :], [height, 1])
+            row_base = np.tile(np.arange(height, dtype=np.float32)[:, np.newaxis], [1, width])
     
-        col_base = np.tile(np.arange(width, dtype=np.float32)[np.newaxis, :], [height, 1])
-        row_base = np.tile(np.arange(height, dtype=np.float32)[:, np.newaxis], [1, width])
+            shifted = np.zeros(video_data.shape)
     
-        shifted = np.zeros(video_data.shape)
+            # Best guess for reference frame, since we can't tell from the data.
+            reference_frame_idx = np.sum(np.sum(np.abs(all_shifts) < 2, axis=0), axis=0).argmax()
     
-        # Best guess for reference frame, since we can't tell from the data.
-        reference_frame_idx = np.sum(np.sum(np.abs(all_shifts) < 2, axis=0), axis=0).argmax()
+            print( "Reference Idx: %03d"%reference_frame_idx )
     
-        print( "Reference Idx: %03d"%reference_frame_idx )
+            for f in range(num_frames):
+                print('Reshifting frame %03d/%03d'%(f,num_frames), end=' ') # Don't make new lines so can see some of the debug info
+                colshifts = all_shifts[:, 0, f] - median_col_shifts
+                rowshifts = all_shifts[:, 1, f] - median_row_shifts
     
-        for f in range(num_frames):
-            print('Reshifting frame %03d/%03d'%(f,num_frames), end=' ') # Don't make new lines so can see some of the debug info
-            colshifts = all_shifts[:, 0, f] - median_col_shifts
-            rowshifts = all_shifts[:, 1, f] - median_row_shifts
+                centered_col_shifts = col_base - np.tile(colshifts[:, np.newaxis], [1, width]).astype("float32")
+                centered_row_shifts = row_base - np.tile(rowshifts[:, np.newaxis], [1, width]).astype("float32")
     
-            centered_col_shifts = col_base - np.tile(colshifts[:, np.newaxis], [1, width]).astype("float32")
-            centered_row_shifts = row_base - np.tile(rowshifts[:, np.newaxis], [1, width]).astype("float32")
+                shifted1 = cv2.remap(video_data[..., f], centered_col_shifts, centered_row_shifts,
+                                            interpolation=cv2.INTER_CUBIC)
     
-            shifted1 = cv2.remap(video_data[..., f], centered_col_shifts, centered_row_shifts,
-                                        interpolation=cv2.INTER_CUBIC)
+                if torsion_params.do_rot90:
+                    shifted[..., f] = np.flipud( np.rot90( shifted1, -1) )
+                else:
+                    shifted[..., f] = shifted1
     
-            if torsion_params.do_rot90:
-                shifted[..., f] = np.flipud( np.rot90( shifted1, -1) )
-            else:
-                shifted[..., f] = shifted1
+                #plt.figure(0)
+                #plt.clf()
+                #plt.imshow(shifted[..., f])
+                #plt.show(block=False)
+                #plt.pause(0.01)
+
+        else:
+            reference_frame_idx=10 #torsion_params.reference_idx
+            shifted=video_data[...,5:500:10] # original: ignore shifts
     
-            #plt.figure(0)
-            #plt.clf()
-            #plt.imshow(shifted[..., f])
-            #plt.show(block=False)
-            #plt.pause(0.01)
-    
+        save_video(torsion_params.filename_reshifted_video,(shifted*255).astype("uint8"),30 )
+
         # Determine and remove residual torsion.
         mask_data = (shifted>0).astype("float32")
         shifted, xforms, inliers, itk_xforms = optimizer_stack_align(shifted, mask_data,
